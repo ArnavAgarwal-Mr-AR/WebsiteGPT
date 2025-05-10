@@ -1,0 +1,7 @@
+crawl4ai
+sentence-transformers
+chromadb
+pydantic-ai
+python-dotenv
+openai
+tqdm
