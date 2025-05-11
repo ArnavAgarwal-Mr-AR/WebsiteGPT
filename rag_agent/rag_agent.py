@@ -7,11 +7,10 @@ from dataclasses import dataclass
 from typing import Optional
 import asyncio
 import chromadb
-
-import dotenv
 from pydantic_ai import RunContext
 from pydantic_ai.agent import Agent
 from openai import AsyncOpenAI
+from models import generate_llama, chat_openai
 
 from utils import (
     get_chroma_client,
@@ -20,14 +19,45 @@ from utils import (
     format_results_as_context
 )
 
-# Load environment variables from .env file
-dotenv.load_dotenv()
+async def run_rag_agent(
+    question: str,
+    model_choice: str,          # "openai" | "llama"
+    api_key: str | None,
+    collection_name: str = "docs",
+    db_directory: str = "./chroma_db",
+    embedding_model: str = "all-MiniLM-L6-v2",
+    n_results: int = 5,
+) -> str:
 
-# Check for OpenAI API key
-if not os.getenv("OPENAI_API_KEY"):
-    print("Error: OPENAI_API_KEY environment variable not set.")
-    print("Please create a .env file with your OpenAI API key or set it in your environment.")
-    sys.exit(1)
+    deps = RAGDeps(
+        chroma_client=get_chroma_client(db_directory),
+        collection_name=collection_name,
+        embedding_model=embedding_model,
+    )
+
+    # 1️⃣  retrieval context
+    context_text = await retrieve(
+        RunContext(deps=deps),
+        search_query=question,
+        n_results=n_results,
+    )
+
+    # 2️⃣  choose LLM
+    if model_choice == "openai":
+        if not api_key:
+            return "❌ OpenAI key required."
+        answer = await chat_openai(
+            api_key,
+            messages=[
+                {"role": "system", "content": context_text},
+                {"role": "user", "content": question},
+            ],
+        )
+    else:  # llama
+        prompt = f"{context_text}\n\n### Question:\n{question}\n### Answer:"
+        answer = generate_llama(prompt)
+
+    return answer
 
 
 @dataclass

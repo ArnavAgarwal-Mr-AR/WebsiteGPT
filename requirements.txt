@@ -1,7 +1,9 @@
 crawl4ai
+gradio
 sentence-transformers
 chromadb
 pydantic-ai
 python-dotenv
 openai
 tqdm
+llama-cpp-python==0.2.57

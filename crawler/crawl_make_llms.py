@@ -1,108 +1,104 @@
-import asyncio
-import json
-from datetime import datetime 
+# crawler/crawl_make_llms.py
+import asyncio, json, hashlib, textwrap, pathlib
+from datetime import datetime
 from urllib.parse import urldefrag
+
 from crawl4ai import (
-    AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode,
-    MemoryAdaptiveDispatcher
+    AsyncWebCrawler, BrowserConfig, CrawlerRunConfig,
+    CacheMode, MemoryAdaptiveDispatcher
 )
 
-all_pages   = []   # keep everything until we finish
-all_chunks  = []   # for llms-full.txt
+# -------------------------------------------------
+# helpers
+# -------------------------------------------------
+def sha(s: str) -> str:
+    return hashlib.sha256(s.encode()).hexdigest()[:12]
 
 def safe_title(res):
-    """Return page title or a fallback slug."""
     if res.metadata and res.metadata.get("title"):
-        return res.metadata["title"]
+        return res.metadata["title"].strip()
     return res.url.rstrip("/").split("/")[-1] or res.url
 
 def safe_markdown(res):
-    """Return raw markdown as a string (may be None)."""
     md = res.markdown
     if md is None:
         return ""
     if isinstance(md, str):
         return md
-    return md.raw_markdown           
+    return md.raw_markdown              # Crawl4AI ≥0.6 wrapper
 
-async def crawl_recursive_batch(start_urls, max_depth=3, max_concurrent=10):
-    browser_config = BrowserConfig(headless=True, verbose=False)
-    run_config = CrawlerRunConfig(
-        cache_mode=CacheMode.BYPASS,
-        stream=False
-    )
-    dispatcher = MemoryAdaptiveDispatcher(
-        memory_threshold_percent=70.0,      # Don't exceed 70% memory usage
-        check_interval=1.0,                 # Check memory every second
-        max_session_permit=max_concurrent   # Max parallel browser sessions
-    )
+# -------------------------------------------------
+async def crawl_site(
+        root_url: str,
+        depth: int,
+        llms_txt: str,
+        full_txt: str,
+        jsonl_path: str,
+):
+    """Crawl → write llms.txt, llms-full.txt, train.jsonl."""
 
-    # Track visited URLs to prevent revisiting and infinite loops (ignoring fragments)
-    visited = set()
-    def normalize_url(url):
-        # Remove fragment (part after #)
-        return urldefrag(url)[0]
-    current_urls = set([normalize_url(u) for u in start_urls])
+    pages, chunks = [], []          # fresh for every call
 
-    async with AsyncWebCrawler(config=browser_config) as crawler:
-        for depth in range(max_depth):
-            print(f"\n=== Crawling Depth {depth+1} ===")
-            # Only crawl URLs we haven't seen yet (ignoring fragments)
-            urls_to_crawl = [normalize_url(url) for url in current_urls if normalize_url(url) not in visited]
+    async with AsyncWebCrawler(
+        config=BrowserConfig(headless=True, verbose=False)
+    ) as crawler:
 
-            if not urls_to_crawl:
+        visited = set()
+        current = {urldefrag(root_url)[0]}
+        run_cfg = CrawlerRunConfig(cache_mode=CacheMode.BYPASS, stream=False)
+        dispatcher = MemoryAdaptiveDispatcher(
+            memory_threshold_percent=70.0,
+            check_interval=1.0,
+            max_session_permit=10,
+        )
+
+        for d in range(depth):
+            todo = [u for u in current if u not in visited]
+            if not todo:
                 break
-
-            # Batch-crawl all URLs at this depth in parallel
             results = await crawler.arun_many(
-                urls=urls_to_crawl,
-                config=run_config,
-                dispatcher=dispatcher
+                urls=todo, config=run_cfg, dispatcher=dispatcher
             )
+            next_lvl = set()
 
-            next_level_urls = set()
+            for r in results:
+                visited.add(urldefrag(r.url)[0])
+                if not r.success:
+                    print(f"[ERROR] {r.url}: {r.error_message}")
+                    continue
 
-            for result in results:
-                norm_url = normalize_url(result.url)
-                visited.add(norm_url)  # Mark as visited (no fragment)
-                if result.success:
-                    all_pages.append({
-                        "title": safe_title(result),
-                        "url":   result.url,
-                        "md":    safe_markdown(result).strip()
-                        })
-                    all_chunks.append(result.markdown.strip())
-                    print(f"[OK] {result.url} | Markdown: {len(result.markdown) if result.markdown else 0} chars")
-                    # Collect all new internal links for the next depth
-                    for link in result.links.get("internal", []):
-                        next_url = normalize_url(link["href"])
-                        if next_url not in visited:
-                            next_level_urls.add(next_url)
-                else:
-                    print(f"[ERROR] {result.url}: {result.error_message}")
-                    
-            # Move to the next set of URLs for the next recursion depth
-            current_urls = next_level_urls
-        # --- write llms.txt (curated index) ---
-        with open("llms.txt", "w", encoding="utf-8") as f:
-            f.write(f"# {start_urls[0]}\n")
-            f.write(f"> Auto-generated on {datetime.utcnow():%Y-%m-%d}\n\n")
-            for p in all_pages:
-                f.write(f"- [{p['title']}]({p['url']}.md)\n")
+                md = safe_markdown(r).strip()
+                pages.append({"title": safe_title(r), "url": r.url, "md": md})
+                if md:
+                    chunks.append(md)
 
-        # --- write llms-full.txt (full text) ---
-        with open("llms-full.txt", "w", encoding="utf-8") as f:
-            f.write("\n\n".join(all_chunks))
+                for link in r.links.get("internal", []):
+                    next_lvl.add(urldefrag(link["href"])[0])
 
-data = {
-    "binary": {
-        "llms.txt": {"data": open("llms.txt","rb").read().decode(), "mimeType":"text/plain"},
-        "llms-full.txt": {"data": open("llms-full.txt","rb").read().decode(), "mimeType":"text/plain"}
-    }
-}
+            current = next_lvl
 
-with open('train.jsonl', 'w') as f:
-    json.dump(data, f, indent=4)
+    # -- llms.txt ----------------------------------------------------------
+    with open(llms_txt, "w", encoding="utf-8") as f:
+        f.write(f"# {root_url}\n")
+        f.write(f"> Auto-generated on {datetime.utcnow():%Y-%m-%d}\n\n")
+        for p in pages:
+            f.write(f"- [{p['title']}]({p['url']}.md)\n")
 
-if __name__ == "__main__":
-    asyncio.run(crawl_recursive_batch(["https://modal.com/"], max_depth=3, max_concurrent=10))
+    # -- llms-full.txt -----------------------------------------------------
+    with open(full_txt, "w", encoding="utf-8") as f:
+        f.write("\n\n".join(chunks))
+
+    # -- train.jsonl  (simple summarise-each-chunk pattern) ----------------
+    with open(jsonl_path, "w", encoding="utf-8") as f:
+        for p in pages:
+            line = {
+                "messages": [
+                    {"role": "system", "content": "Summarise the following."},
+                    {"role": "user", "content": textwrap.shorten(p["md"], 2048)},
+                    {"role": "assistant", "content": p["title"]},
+                ]
+            }
+            f.write(json.dumps(line) + "\n")
+
+    # Return file paths so callers (Gradio etc.) can serve them
+    return llms_txt, full_txt, jsonl_path
