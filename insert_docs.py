@@ -1,15 +1,3 @@
-"""
-insert_docs.py
---------------
-Command-line utility to crawl any URL using Crawl4AI, detect content type (sitemap, .txt, or regular page),
-use the appropriate crawl method, chunk the resulting Markdown into <1000 character blocks by header hierarchy,
-and insert all chunks into ChromaDB with metadata.
-
-Usage:
-    python insert_docs.py <URL> [--collection ...] [--db-dir ...] [--embedding-model ...]
-"""
-import argparse
-import sys
 import re
 import asyncio
 from typing import List, Dict, Any
@@ -60,7 +48,7 @@ def is_txt(url: str) -> bool:
     return url.endswith('.txt')
 
 async def crawl_recursive_internal_links(start_urls, max_depth=3, max_concurrent=10) -> List[Dict[str,Any]]:
-    """Recursive crawl using logic from 5-crawl_recursive_internal_links.py. Returns list of dicts with url and markdown."""
+    """Recursive crawl of internal links, returning list of dicts with url and markdown."""
     browser_config = BrowserConfig(headless=True, verbose=False)
     run_config = CrawlerRunConfig(cache_mode=CacheMode.BYPASS, stream=False)
     dispatcher = MemoryAdaptiveDispatcher(
@@ -102,7 +90,7 @@ async def crawl_recursive_internal_links(start_urls, max_depth=3, max_concurrent
     return results_all
 
 async def crawl_markdown_file(url: str) -> List[Dict[str,Any]]:
-    """Crawl a .txt or markdown file using logic from 4-crawl_and_chunk_markdown.py."""
+    """Crawl a .txt or markdown file."""
     browser_config = BrowserConfig(headless=True)
     crawl_config = CrawlerRunConfig()
 
@@ -111,8 +99,7 @@ async def crawl_markdown_file(url: str) -> List[Dict[str,Any]]:
         if result.success and result.markdown:
             return [{'url': url, 'markdown': result.markdown}]
         else:
-            print(f"Failed to crawl {url}: {result.error_message}")
-            return []
+            raise Exception(f"Failed to crawl {url}: {result.error_message}")
 
 def parse_sitemap(sitemap_url: str) -> List[str]:
     resp = requests.get(sitemap_url)
@@ -123,12 +110,12 @@ def parse_sitemap(sitemap_url: str) -> List[str]:
             tree = ElementTree.fromstring(resp.content)
             urls = [loc.text for loc in tree.findall('.//{*}loc')]
         except Exception as e:
-            print(f"Error parsing sitemap XML: {e}")
+            raise Exception(f"Error parsing sitemap XML: {e}")
 
     return urls
 
 async def crawl_batch(urls: List[str], max_concurrent: int = 10) -> List[Dict[str,Any]]:
-    """Batch crawl using logic from 3-crawl_sitemap_in_parallel.py."""
+    """Batch crawl URLs in parallel."""
     browser_config = BrowserConfig(headless=True, verbose=False)
     crawl_config = CrawlerRunConfig(cache_mode=CacheMode.BYPASS, stream=False)
     dispatcher = MemoryAdaptiveDispatcher(
@@ -152,33 +139,30 @@ def extract_section_info(chunk: str) -> Dict[str, Any]:
         "word_count": len(chunk.split())
     }
 
-def main():
-    parser = argparse.ArgumentParser(description="Insert crawled docs into ChromaDB")
-    parser.add_argument("url", help="URL to crawl (regular, .txt, or sitemap)")
-    parser.add_argument("--collection", default="docs", help="ChromaDB collection name")
-    parser.add_argument("--db-dir", default="./chroma_db", help="ChromaDB directory")
-    parser.add_argument("--embedding-model", default="all-MiniLM-L6-v2", help="Embedding model name")
-    parser.add_argument("--chunk-size", type=int, default=1000, help="Max chunk size (chars)")
-    parser.add_argument("--max-depth", type=int, default=3, help="Recursion depth for regular URLs")
-    parser.add_argument("--max-concurrent", type=int, default=10, help="Max parallel browser sessions")
-    parser.add_argument("--batch-size", type=int, default=100, help="ChromaDB insert batch size")
-    args = parser.parse_args()
-
+async def insert_docs(
+    url: str,
+    collection: str = "docs",
+    db_dir: str = "./chroma_db",
+    embedding_model: str = "all-MiniLM-L6-v2",
+    chunk_size: int = 1000,
+    max_depth: int = 3,
+    max_concurrent: int = 10,
+    batch_size: int = 100
+) -> Dict[str, Any]:
+    """
+    Crawl a URL, chunk the content, and insert into ChromaDB.
+    Returns a dict with the number of chunks inserted.
+    """
     # Detect URL type
-    url = args.url
     if is_txt(url):
-        print(f"Detected .txt/markdown file: {url}")
-        crawl_results = asyncio.run(crawl_markdown_file(url))
+        crawl_results = await crawl_markdown_file(url)
     elif is_sitemap(url):
-        print(f"Detected sitemap: {url}")
         sitemap_urls = parse_sitemap(url)
         if not sitemap_urls:
-            print("No URLs found in sitemap.")
-            sys.exit(1)
-        crawl_results = asyncio.run(crawl_batch(sitemap_urls, max_concurrent=args.max_concurrent))
+            raise Exception("No URLs found in sitemap.")
+        crawl_results = await crawl_batch(sitemap_urls, max_concurrent=max_concurrent)
     else:
-        print(f"Detected regular URL: {url}")
-        crawl_results = asyncio.run(crawl_recursive_internal_links([url], max_depth=args.max_depth, max_concurrent=args.max_concurrent))
+        crawl_results = await crawl_recursive_internal_links([url], max_depth=max_depth, max_concurrent=max_concurrent)
 
     # Chunk and collect metadata
     ids, documents, metadatas = [], [], []
@@ -186,7 +170,7 @@ def main():
     for doc in crawl_results:
         url = doc['url']
         md = doc['markdown']
-        chunks = smart_chunk_markdown(md, max_len=args.chunk_size)
+        chunks = smart_chunk_markdown(md, max_len=chunk_size)
         for chunk in chunks:
             ids.append(f"chunk-{chunk_idx}")
             documents.append(chunk)
@@ -197,16 +181,11 @@ def main():
             chunk_idx += 1
 
     if not documents:
-        print("No documents found to insert.")
-        sys.exit(1)
+        raise Exception("No documents found to insert.")
 
-    print(f"Inserting {len(documents)} chunks into ChromaDB collection '{args.collection}'...")
+    # Insert into ChromaDB
+    client = get_chroma_client(db_dir)
+    collection_obj = get_or_create_collection(client, collection, embedding_model_name=embedding_model)
+    add_documents_to_collection(collection_obj, ids, documents, metadatas, batch_size=batch_size)
 
-    client = get_chroma_client(args.db_dir)
-    collection = get_or_create_collection(client, args.collection, embedding_model_name=args.embedding_model)
-    add_documents_to_collection(collection, ids, documents, metadatas, batch_size=args.batch_size)
-
-    print(f"Successfully added {len(documents)} chunks to ChromaDB collection '{args.collection}'.")
-
-if __name__ == "__main__":
-    main()
+    return {"chunk_count": len(documents)}

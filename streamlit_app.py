@@ -1,5 +1,6 @@
 import streamlit as st
 import asyncio
+from insert_docs import insert_docs
 
 # Import all the message part classes
 from pydantic_ai.messages import (
@@ -62,16 +63,46 @@ async def main():
         st.session_state.messages = []
     if "api_key" not in st.session_state:
         st.session_state.api_key = ""
+    if "website_url" not in st.session_state:
+        st.session_state.website_url = ""
 
+    # Sidebar for configuration
+    st.sidebar.header("Configuration")
+    
     # API key input
-    st.sidebar.header("API Configuration")
     api_key = st.sidebar.text_input("Enter API Key", type="password", value=st.session_state.api_key)
     
-    # Update session state with API key
+    # Website URL input
+    website_url = st.sidebar.text_input("Enter Website URL", value=st.session_state.website_url)
+    
+    # Update session state
     if api_key:
         st.session_state.api_key = api_key
         st.session_state.agent_deps = await get_agent_deps(api_key)
-    
+    if website_url:
+        st.session_state.website_url = website_url
+
+    # Button to trigger document insertion
+    if st.sidebar.button("Crawl and Insert Documents"):
+        if not website_url:
+            st.sidebar.error("Please enter a website URL.")
+        else:
+            with st.spinner("Crawling and inserting documents..."):
+                try:
+                    result = await insert_docs(
+                        url=website_url,
+                        collection="docs",
+                        db_dir="./chroma_db",
+                        embedding_model="all-MiniLM-L6-v2",
+                        chunk_size=1000,
+                        max_depth=3,
+                        max_concurrent=10,
+                        batch_size=100
+                    )
+                    st.sidebar.success(f"Successfully inserted {result['chunk_count']} chunks from {website_url}")
+                except Exception as e:
+                    st.sidebar.error(f"Error inserting documents: {str(e)}")
+
     # Check if API key is provided
     if not st.session_state.api_key:
         st.warning("Please enter an API key to continue.")
