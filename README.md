@@ -8,7 +8,7 @@ WebsiteGPT is a sophisticated web crawling and question-answering system that co
 - Document processing and chunking
 - Vector storage using ChromaDB
 - RAG-based question answering
-- Support for multiple LLM backends (OpenAI and Llama)
+- Support for multiple LLM backends (currently OpenAI only)
 - Interactive web interface using Streamlit
 - Real-time streaming responses
 
@@ -157,12 +157,6 @@ Note: If you're using Windows, the system will automatically configure the appro
    - Configure concurrent requests
    - Monitor memory usage
    - Implement caching where appropriate
-
-## Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-[Specify your license here]
 
 ## Acknowledgments
 - OpenAI for the language models
