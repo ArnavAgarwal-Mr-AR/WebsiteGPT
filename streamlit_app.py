@@ -1,27 +1,55 @@
 import streamlit as st
 import asyncio
+import platform
+
+# Set Windows Proactor event loop policy for Playwright compatibility
+if platform.system() == "Windows":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from insert_docs import insert_docs
 
-# Import all the message part classes
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelRequest,
-    ModelResponse,
-    SystemPromptPart,
-    UserPromptPart,
-    TextPart,
-    ToolCallPart,
-    ToolReturnPart,
-    RetryPromptPart,
-    ModelMessagesTypeAdapter
-)
+# Lazy import message parts
+def get_message_parts():
+    from pydantic_ai.messages import (
+        ModelMessage,
+        ModelRequest,
+        ModelResponse,
+        SystemPromptPart,
+        UserPromptPart,
+        TextPart,
+        ToolCallPart,
+        ToolReturnPart,
+        RetryPromptPart,
+        ModelMessagesTypeAdapter
+    )
+    return {
+        "ModelMessage": ModelMessage,
+        "ModelRequest": ModelRequest,
+        "ModelResponse": ModelResponse,
+        "SystemPromptPart": SystemPromptPart,
+        "UserPromptPart": UserPromptPart,
+        "TextPart": TextPart,
+        "ToolCallPart": ToolCallPart,
+        "ToolReturnPart": ToolReturnPart,
+        "RetryPromptPart": RetryPromptPart,
+        "ModelMessagesTypeAdapter": ModelMessagesTypeAdapter
+    }
 
-from rag_agent import agent, RAGDeps
-from utils import get_chroma_client
+# Lazy import rag_agent
+def get_rag_agent():
+    from rag_agent import agent, RAGDeps
+    return agent, RAGDeps
+
+# Lazy import utils
+def get_utils():
+    from utils import get_chroma_client
+    return get_chroma_client
 
 MODEL_CHOICE = 'gpt-4.1-mini'
 
 async def get_agent_deps(api_key):
+    get_chroma_client = get_utils()
+    _, RAGDeps = get_rag_agent()
     return RAGDeps(
         chroma_client=get_chroma_client("./chroma_db"),
         collection_name="docs",
@@ -33,26 +61,25 @@ async def get_agent_deps(api_key):
 def display_message_part(part):
     """
     Display a single part of a message in the Streamlit UI.
-    Customize how you display system prompts, user prompts,
-    tool calls, tool returns, etc.
     """
     if part.part_kind == 'user-prompt':
         with st.chat_message("user"):
             st.markdown(part.content)
     elif part.part_kind == 'text':
         with st.chat_message("assistant"):
-            st.markdown(part.content)             
+            st.markdown(part.content)
 
 async def run_agent_with_streaming(user_input):
+    agent, _ = get_rag_agent()
     async with agent.run_stream(
-        user_input, 
-        deps=st.session_state.agent_deps, 
+        user_input,
+        deps=st.session_state.agent_deps,
         message_history=st.session_state.messages
     ) as result:
-        async for message in result.stream_text(delta=True):  
+        async for message in result.stream_text(delta=True):
             yield message
 
-    # Add the new messages to the chat history
+    # Add new messages to chat history
     st.session_state.messages.extend(result.new_messages())
 
 async def main():
@@ -65,20 +92,27 @@ async def main():
         st.session_state.api_key = ""
     if "website_url" not in st.session_state:
         st.session_state.website_url = ""
+    if "agent_deps" not in st.session_state:
+        st.session_state.agent_deps = None
 
     # Sidebar for configuration
     st.sidebar.header("Configuration")
-    
+
     # API key input
     api_key = st.sidebar.text_input("Enter API Key", type="password", value=st.session_state.api_key)
-    
+
     # Website URL input
     website_url = st.sidebar.text_input("Enter Website URL", value=st.session_state.website_url)
-    
+
     # Update session state
-    if api_key:
+    if api_key and api_key != st.session_state.api_key:
         st.session_state.api_key = api_key
-        st.session_state.agent_deps = await get_agent_deps(api_key)
+        try:
+            st.session_state.agent_deps = await get_agent_deps(api_key)
+        except Exception as e:
+            st.sidebar.error(f"Failed to initialize agent: {str(e)}")
+            st.session_state.agent_deps = None
+
     if website_url:
         st.session_state.website_url = website_url
 
@@ -103,14 +137,20 @@ async def main():
                 except Exception as e:
                     st.sidebar.error(f"Error inserting documents: {str(e)}")
 
-    # Check if API key is provided
+    # Check if API key and agent_deps are ready
     if not st.session_state.api_key:
         st.warning("Please enter an API key to continue.")
         return
+    if not st.session_state.agent_deps:
+        st.warning("Agent initialization failed. Please check your API key.")
+        return
+
+    # Load message parts for rendering
+    message_parts = get_message_parts()
 
     # Display all messages from the conversation
     for msg in st.session_state.messages:
-        if isinstance(msg, ModelRequest) or isinstance(msg, ModelResponse):
+        if isinstance(msg, message_parts["ModelRequest"]) or isinstance(msg, message_parts["ModelResponse"]):
             for part in msg.parts:
                 display_message_part(part)
 
@@ -126,13 +166,15 @@ async def main():
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             full_response = ""
-            
+
             generator = run_agent_with_streaming(user_input)
             async for message in generator:
                 full_response += message
                 message_placeholder.markdown(full_response + "▌")
-            
+
             message_placeholder.markdown(full_response)
 
+# Run the main coroutine using Streamlit's async context
 if __name__ == "__main__":
-    asyncio.run(main())
+    import streamlit.runtime.scriptrunner as scriptrunner
+    scriptrunner.exec_async_in_loop(main())
