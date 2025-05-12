@@ -1,7 +1,7 @@
-# LLM Crawler Tuner - RAG-based Web Crawler and Q&A System
+# WebsiteGPT - RAG-based Web Crawler and Q&A System
 
 ## Overview
-LLM Crawler Tuner is a sophisticated web crawling and question-answering system that combines web crawling capabilities with Retrieval-Augmented Generation (RAG) to create an intelligent Q&A system. The system can crawl websites, process their content, and answer questions based on the crawled information using advanced language models.
+WebsiteGPT is a sophisticated web crawling and question-answering system that combines web crawling capabilities with Retrieval-Augmented Generation (RAG) to create an intelligent Q&A system. The system can crawl websites, process their content, and answer questions based on the crawled information using advanced language models. The best part is it generates llms.txt and full-llm.txt files which you can download and use with other GPT models of your own.
 
 ## Key Features
 - Web crawling with configurable depth and concurrency
@@ -68,8 +68,8 @@ RAG is a technique that combines retrieval-based and generation-based approaches
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
-cd llm_crawler_tuner
+git clone https://github.com/ArnavAgarwal-Mr-AR/WebsiteGPT
+cd WebsiteGPT
 ```
 
 2. Install Python dependencies:
@@ -80,12 +80,11 @@ pip install -r requirements.txt
 3. Install Playwright and its dependencies:
 ```bash
 playwright install
+crawl4AI-setup
 ```
 This step is crucial as the system uses Playwright for web crawling capabilities.
 
-4. Set up your API keys:
-- OpenAI API key for GPT models
-- (Optional) Llama API key for alternative model
+4. Set up your OpenAI API key
 
 5. Run the application:
 ```bash
