@@ -1,7 +1,7 @@
 # WebsiteGPT - RAG-based Web Crawler and Q&A System
 
 ## Overview
-WebsiteGPT is a sophisticated web crawling and question-answering system that combines web crawling capabilities with Retrieval-Augmented Generation (RAG) to create an intelligent Q&A system. The system can crawl websites, process their content, and answer questions based on the crawled information using advanced language models. The best part is it generates llms.txt and full-llm.txt files (see python notebook) which you can download and use with other GPT models of your own. YOu can also upload them in instructions of chatgpt project folders.
+WebsiteGPT is a sophisticated web crawling and question-answering system that combines web crawling capabilities with Retrieval-Augmented Generation (RAG) to create an intelligent Q&A system. The system can crawl websites, process their content, and answer questions based on the crawled information using advanced language models. The best part is it generates llms.txt and full-llm.txt files (see uploaded python notebook) which you can download and use with other GPT models of your own. 
 
 ## Key Features
 - Web crawling with configurable depth and concurrency
@@ -102,7 +102,7 @@ Note: If you're using Windows, the system will automatically configure the appro
 
 2. **Asking Questions**:
    - Enter your question in the chat interface
-   - Select the preferred model (OpenAI/Llama)
+   - Select the preferred model (currently OpenAI only)
    - View the streaming response
 
 ## Configuration Options
@@ -114,7 +114,7 @@ Note: If you're using Windows, the system will automatically configure the appro
   - Batch size for processing
 
 - **Model Settings**:
-  - Model choice (OpenAI/Llama)
+  - Model choice (You can add more models of your choice)
   - Embedding model
   - API keys
 
