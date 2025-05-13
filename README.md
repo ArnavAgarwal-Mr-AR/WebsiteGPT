@@ -160,5 +160,25 @@ Note: If you're using Windows, the system will automatically configure the appro
 
 ## Acknowledgments
 - OpenAI for the language models
+- Crawl4AI for web crawler
 - ChromaDB team for the vector database
 - Streamlit for the web interface framework
+
+
+## Contact me 📪
+<div id="badges">
+  <a href="https://www.linkedin.com/in/arnav-agarwal-571a59243/" target="blank">
+   <img src="https://img.shields.io/badge/LinkedIn-blue?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn Badge"/>
+  </a>
+ <a href="https://www.instagram.com/arnav_agarwal_sw?igsh=MWUxaWlkanZob2lqeA==" target="blank">
+ <img src="https://img.shields.io/badge/Instagram-E4405F?style=for-the-badge&logo=instagram&logoColor=white"  alt="Instagram Badge" />
+ </a>
+ </a>
+ <a href="https://medium.com/@arumynameis" target="blank">
+ <img src="https://img.shields.io/badge/Medium-12100E?style=for-the-badge&logo=medium&logoColor=white"  alt="Medium Badge" />
+ </a>
+ <a href="mailto:arumynameis@gmail.com" target="blank">
+ <img src="https://img.shields.io/badge/Gmail-D14836?style=for-the-badge&logo=gmail&logoColor=white"  alt="Gmail Badge" />
+ </a>
+</div>
+
