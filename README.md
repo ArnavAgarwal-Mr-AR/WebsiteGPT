@@ -1,7 +1,7 @@
 # WebsiteGPT - RAG-based Web Crawler and Q&A System
 
 ## Overview
-WebsiteGPT is a sophisticated web crawling and question-answering system that combines web crawling capabilities with Retrieval-Augmented Generation (RAG) to create an intelligent Q&A system. The system can crawl websites, process their content, and answer questions based on the crawled information using advanced language models. The best part is it generates llms.txt and full-llm.txt files which you can download and use with other GPT models of your own.
+WebsiteGPT is a sophisticated web crawling and question-answering system that combines web crawling capabilities with Retrieval-Augmented Generation (RAG) to create an intelligent Q&A system. The system can crawl websites, process their content, and answer questions based on the crawled information using advanced language models. The best part is it generates llms.txt and full-llm.txt files (see python notebook) which you can download and use with other GPT models of your own. YOu can also upload them in instructions of chatgpt project folders.
 
 ## Key Features
 - Web crawling with configurable depth and concurrency
@@ -80,7 +80,7 @@ pip install -r requirements.txt
 3. Install Playwright and its dependencies:
 ```bash
 playwright install
-crawl4AI-setup
+crawl4ai-setup
 ```
 This step is crucial as the system uses Playwright for web crawling capabilities.
 
